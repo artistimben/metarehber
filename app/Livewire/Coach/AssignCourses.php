@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Livewire\Coach;
+
+use App\Models\Course;
+use App\Models\Field;
+use App\Models\StudentAssignment;
+use App\Models\SubTopic;
+use App\Models\Topic;
+use App\Models\User;
+use Livewire\Component;
+
+class AssignCourses extends Component
+{
+    public $studentId;
+    public $student;
+    
+    // Form
+    public $selectedFieldId;
+    public $selectedCourses = [];
+    public $selectedTopics = [];
+    public $selectedSubTopics = [];
+    
+    // View
+    public $showAssignModal = false;
+    public $expandedFields = [];
+
+    public function mount($studentId)
+    {
+        $this->studentId = $studentId;
+        $this->student = User::findOrFail($studentId);
+        
+        // Bu öğrenci bu koça ait mi kontrol et
+        if (!auth()->user()->students()->where('users.id', $studentId)->exists()) {
+            abort(403);
+        }
+    }
+
+    public function toggleField($fieldId)
+    {
+        if (in_array($fieldId, $this->expandedFields)) {
+            $this->expandedFields = array_diff($this->expandedFields, [$fieldId]);
+        } else {
+            $this->expandedFields[] = $fieldId;
+        }
+    }
+
+    public function assignField($fieldId)
+    {
+        $field = Field::with('courses.topics.subTopics')->findOrFail($fieldId);
+        
+        // Bu alandaki tüm dersleri, konuları ve alt konuları ata
+        foreach ($field->courses as $course) {
+            foreach ($course->topics as $topic) {
+                foreach ($topic->subTopics as $subTopic) {
+                    StudentAssignment::firstOrCreate([
+                        'student_id' => $this->studentId,
+                        'coach_id' => auth()->id(),
+                        'course_id' => $course->id,
+                        'topic_id' => $topic->id,
+                        'sub_topic_id' => $subTopic->id,
+                    ], [
+                        'assignment_type' => 'sub_topic',
+                    ]);
+                }
+            }
+        }
+
+        session()->flash('message', "{$field->name} alanının tüm içeriği başarıyla atandı.");
+    }
+
+    public function assignCourse($courseId)
+    {
+        $course = Course::with('topics.subTopics')->findOrFail($courseId);
+        
+        foreach ($course->topics as $topic) {
+            foreach ($topic->subTopics as $subTopic) {
+                StudentAssignment::firstOrCreate([
+                    'student_id' => $this->studentId,
+                    'coach_id' => auth()->id(),
+                    'course_id' => $course->id,
+                    'topic_id' => $topic->id,
+                    'sub_topic_id' => $subTopic->id,
+                ], [
+                    'assignment_type' => 'sub_topic',
+                ]);
+            }
+        }
+
+        session()->flash('message', "{$course->name} dersi başarıyla atandı.");
+    }
+
+    public function assignTopic($topicId)
+    {
+        $topic = Topic::with('subTopics')->findOrFail($topicId);
+        
+        foreach ($topic->subTopics as $subTopic) {
+            StudentAssignment::firstOrCreate([
+                'student_id' => $this->studentId,
+                'coach_id' => auth()->id(),
+                'course_id' => $topic->course_id,
+                'topic_id' => $topic->id,
+                'sub_topic_id' => $subTopic->id,
+            ], [
+                'assignment_type' => 'sub_topic',
+            ]);
+        }
+
+        session()->flash('message', "{$topic->name} konusu başarıyla atandı.");
+    }
+
+    public function removeAssignment($assignmentId)
+    {
+        StudentAssignment::where('student_id', $this->studentId)
+            ->where('coach_id', auth()->id())
+            ->findOrFail($assignmentId)
+            ->delete();
+
+        session()->flash('message', 'Atama kaldırıldı.');
+    }
+
+    public function render()
+    {
+        $fields = Field::with(['courses.topics.subTopics'])
+            ->where('is_active', true)
+            ->orderBy('order')
+            ->get();
+
+        // Öğrenciye atanan konular
+        $assignments = StudentAssignment::where('student_id', $this->studentId)
+            ->where('coach_id', auth()->id())
+            ->with(['course', 'topic', 'subTopic'])
+            ->get()
+            ->groupBy('course.field.name');
+
+        return view('livewire.coach.assign-courses', [
+            'fields' => $fields,
+            'assignments' => $assignments,
+        ]);
+    }
+}
