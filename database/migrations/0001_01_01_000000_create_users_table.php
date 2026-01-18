@@ -13,7 +13,10 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('role_id')->constrained()->onDelete('cascade');
+            // NOTE: The `roles` table is created in a later migration in this project.
+            // We add the FK constraint in the roles migration to avoid migration-order issues.
+            $table->unsignedBigInteger('role_id');
+            $table->index('role_id');
             $table->string('name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();

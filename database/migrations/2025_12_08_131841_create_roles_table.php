@@ -17,6 +17,16 @@ return new class extends Migration
             $table->string('display_name');
             $table->timestamps();
         });
+
+        // Add FK after `roles` exists (users migration runs earlier in this project).
+        if (Schema::hasTable('users')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->foreign('role_id')
+                    ->references('id')
+                    ->on('roles')
+                    ->onDelete('cascade');
+            });
+        }
     }
 
     /**
