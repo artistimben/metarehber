@@ -31,4 +31,14 @@ class Course extends Model
     {
         return $this->hasMany(Topic::class)->orderBy('order');
     }
+
+    public function questionLogs(): HasMany
+    {
+        return $this->hasMany(QuestionLog::class);
+    }
+
+    public function studentAssignments(): HasMany
+    {
+        return $this->hasMany(StudentAssignment::class);
+    }
 }

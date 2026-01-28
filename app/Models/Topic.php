@@ -31,4 +31,9 @@ class Topic extends Model
     {
         return $this->hasMany(SubTopic::class)->orderBy('order');
     }
+
+    public function questionLogs(): HasMany
+    {
+        return $this->hasMany(QuestionLog::class);
+    }
 }

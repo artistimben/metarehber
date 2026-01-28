@@ -15,7 +15,7 @@ class ScheduleBuilder extends Component
 {
     public $scheduleId = null;
     public $schedule = null;
-    
+
     // Form alanları
     public $studentId;
     public $scheduleName;
@@ -23,24 +23,24 @@ class ScheduleBuilder extends Component
     public $isTemplate = false;
     public $isMasterTemplate = false;
     public $scheduleType = 'timed'; // 'timed' veya 'daily'
-    
+
     // Program süresi yönetimi
     public $startDate;
     public $endDate;
     public $durationType = 'date_range'; // 'date_range' veya 'duration'
     public $durationDays;
     public $weekNumber = 1;
-    
+
     // Otomatik isimlendirme
     public $useAutoNaming = true;
-    
+
     // Master template kopyalama
     public $selectedMasterTemplateId;
     public $masterTemplates = [];
-    
+
     // Öğrenci kaynakları
     public $studentResources = [];
-    
+
     // Görev ekleme modalı
     public $showItemModal = false;
     public $editingItemId = null;
@@ -52,38 +52,54 @@ class ScheduleBuilder extends Component
     public $studentResourceId;
     public $questionCount = 0;
     public $description;
-    
+
     // Listeleme için
     public $courses = [];
     public $topics = [];
     public $subTopics = [];
     public $items = [];
     public $availableResources = [];
-    
+
+    // Swap/Move yönetimi
+    public $pendingSwapItemId = null;
+
     // Tablo için saat aralıkları
     public $timeSlots = [
-        '06:00-07:00', '07:00-08:00', '08:00-09:00', '09:00-10:00',
-        '10:00-11:00', '11:00-12:00', '12:00-13:00', '13:00-14:00',
-        '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00',
-        '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00',
-        '22:00-23:00', '23:00-00:00',
+        '06:00-07:00',
+        '07:00-08:00',
+        '08:00-09:00',
+        '09:00-10:00',
+        '10:00-11:00',
+        '11:00-12:00',
+        '12:00-13:00',
+        '13:00-14:00',
+        '14:00-15:00',
+        '15:00-16:00',
+        '16:00-17:00',
+        '17:00-18:00',
+        '18:00-19:00',
+        '19:00-20:00',
+        '20:00-21:00',
+        '21:00-22:00',
+        '22:00-23:00',
+        '23:00-00:00',
     ];
-    
+
     // Görünür saat dilimleri (varsayılan olarak hepsi görünür)
     public $visibleTimeSlots = [];
-    
+
     // Saat sütunu görünürlüğü (true = göster, false = gizle)
     public $showTimeColumn = true;
 
     public function mount($scheduleId = null)
     {
         $this->scheduleId = $scheduleId;
-        
-                if ($scheduleId) {
-                    $this->schedule = StudySchedule::where('coach_id', auth()->id())
-                        ->with(['items', 'student'])
-                        ->findOrFail($scheduleId);
-                
+
+        if ($scheduleId) {
+            $this->schedule = StudySchedule::where('coach_id', auth()->id())
+                ->with(['items', 'student'])
+                ->findOrFail($scheduleId);
+
             $this->studentId = $this->schedule->student_id;
             $this->scheduleName = $this->schedule->name;
             $this->isActive = $this->schedule->is_active;
@@ -96,7 +112,7 @@ class ScheduleBuilder extends Component
             $this->weekNumber = $this->schedule->week_number;
             $this->visibleTimeSlots = $this->schedule->visible_time_slots ?? $this->timeSlots;
             $this->showTimeColumn = !empty($this->visibleTimeSlots);
-            
+
             // Determine duration type
             if ($this->startDate || $this->endDate) {
                 $this->durationType = 'date_range';
@@ -108,7 +124,7 @@ class ScheduleBuilder extends Component
             $this->visibleTimeSlots = $this->timeSlots;
             $this->showTimeColumn = true;
         }
-        
+
         $this->loadCourses();
         $this->loadItems();
         $this->loadMasterTemplates();
@@ -124,23 +140,23 @@ class ScheduleBuilder extends Component
             ->with('field')
             ->orderBy('name')
             ->get();
-        
+
         // TYT ve AYT derslerini ayır
-        $tytCourses = $allCourses->filter(function($course) {
+        $tytCourses = $allCourses->filter(function ($course) {
             return $course->field && strtolower($course->field->slug) === 'tyt';
         })->sortBy('name');
-        
-        $aytCourses = $allCourses->filter(function($course) {
+
+        $aytCourses = $allCourses->filter(function ($course) {
             return $course->field && strtolower($course->field->slug) === 'ayt';
         })->sortBy('name');
-        
+
         // Diğer alanlar (DGS, KPSS vb.)
-        $otherCourses = $allCourses->filter(function($course) {
-            return !$course->field || 
-                   (strtolower($course->field->slug) !== 'tyt' && 
+        $otherCourses = $allCourses->filter(function ($course) {
+            return !$course->field ||
+                (strtolower($course->field->slug) !== 'tyt' &&
                     strtolower($course->field->slug) !== 'ayt');
         })->sortBy('name');
-        
+
         // Gruplandırılmış dersler
         $this->courses = [
             'tyt' => $tytCourses,
@@ -174,7 +190,7 @@ class ScheduleBuilder extends Component
     {
         $this->loadStudentResources();
         $this->loadAvailableResources();
-        
+
         if ($this->useAutoNaming && $value) {
             $this->generateAutoName();
         }
@@ -241,12 +257,12 @@ class ScheduleBuilder extends Component
         $rules = [
             'scheduleName' => 'required|string|max:255',
         ];
-        
+
         // Şablon değilse ve master template değilse öğrenci zorunlu
         if (!$this->isTemplate && !$this->isMasterTemplate) {
             $rules['studentId'] = 'required|exists:users,id';
         }
-        
+
         // Duration validation
         if ($this->durationType === 'date_range') {
             $rules['startDate'] = 'nullable|date';
@@ -254,7 +270,7 @@ class ScheduleBuilder extends Component
         } elseif ($this->durationType === 'duration') {
             $rules['durationDays'] = 'nullable|integer|min:1';
         }
-        
+
         $this->validate($rules);
 
         $data = [
@@ -277,7 +293,7 @@ class ScheduleBuilder extends Component
             $data['end_date'] = null;
             $data['duration_days'] = $this->durationDays;
         }
-        
+
         // Görünür saat dilimlerini kaydet
         $data['visible_time_slots'] = $this->visibleTimeSlots ?? $this->timeSlots;
 
@@ -288,7 +304,7 @@ class ScheduleBuilder extends Component
         } else {
             $data['coach_id'] = auth()->id();
             $schedule = StudySchedule::create($data);
-            
+
             $this->scheduleId = $schedule->id;
             $this->schedule = $schedule;
         }
@@ -352,7 +368,7 @@ class ScheduleBuilder extends Component
         }
 
         session()->flash('message', 'Şablon kopyalandı ve öğrenciye atandı.');
-        
+
         // Redirect to the new schedule
         return redirect()->route('coach.schedule-builder', ['scheduleId' => $newSchedule->id]);
     }
@@ -380,14 +396,14 @@ class ScheduleBuilder extends Component
             $this->questionCount = $item->question_count;
             $this->description = $item->description;
             $this->studentResourceId = $item->student_resource_id;
-            
+
             if ($this->courseId) {
                 $this->updatedCourseId($this->courseId);
             }
             if ($this->topicId) {
                 $this->updatedTopicId($this->topicId);
             }
-            
+
             // Kaynakları yükle
             $this->loadAvailableResources();
         } else {
@@ -401,7 +417,7 @@ class ScheduleBuilder extends Component
                 $this->timeSlot = null; // Saat opsiyonel, boş bırakılabilir
             }
         }
-        
+
         // Kaynakları yükle
         $this->loadAvailableResources();
         $this->showItemModal = true;
@@ -428,14 +444,14 @@ class ScheduleBuilder extends Component
         $this->subTopics = [];
         $this->availableResources = [];
     }
-    
+
     public function loadAvailableResources()
     {
         if (!$this->studentId) {
             $this->availableResources = [];
             return;
         }
-        
+
         // Öğrenciye atanmış kaynakları al
         $this->availableResources = \App\Models\StudentResource::where('student_id', $this->studentId)
             ->where('coach_id', auth()->id())
@@ -457,7 +473,7 @@ class ScheduleBuilder extends Component
             'questionCount' => 'nullable|integer|min:0',
             'timeSlot' => 'nullable|string', // Saat opsiyonel
         ];
-        
+
         $this->validate($rules);
 
         $data = [
@@ -490,10 +506,165 @@ class ScheduleBuilder extends Component
         session()->flash('message', 'Görev silindi.');
     }
 
+    public function moveItemUp($itemId)
+    {
+        $item = ScheduleItem::findOrFail($itemId);
+
+        // Aynı hücredeki (gün ve saat) diğer öğeleri bul
+        $siblings = ScheduleItem::where('schedule_id', $this->scheduleId)
+            ->where('day_of_week', $item->day_of_week)
+            ->where('time_slot', $item->time_slot)
+            ->orderBy('order')
+            ->get();
+
+        $index = $siblings->search(fn($s) => $s->id === $item->id);
+
+        if ($index > 0) {
+            // Aynı hücre içinde yukarı taşı
+            $prevItem = $siblings[$index - 1];
+            $tempOrder = $item->order;
+            $item->update(['order' => $prevItem->order]);
+            $prevItem->update(['order' => $tempOrder]);
+        } else {
+            // Üstteki zaman dilimine taşı (eğer varsa)
+            $this->moveToPreviousTimeSlot($item);
+        }
+
+        $this->loadItems();
+    }
+
+    public function moveItemDown($itemId)
+    {
+        $item = ScheduleItem::findOrFail($itemId);
+
+        // Aynı hücredeki diğer öğeleri bul
+        $siblings = ScheduleItem::where('schedule_id', $this->scheduleId)
+            ->where('day_of_week', $item->day_of_week)
+            ->where('time_slot', $item->time_slot)
+            ->orderBy('order')
+            ->get();
+
+        $index = $siblings->search(fn($s) => $s->id === $item->id);
+
+        if ($index < count($siblings) - 1) {
+            // Aynı hücre içinde aşağı taşı
+            $nextItem = $siblings[$index + 1];
+            $tempOrder = $item->order;
+            $item->update(['order' => $nextItem->order]);
+            $nextItem->update(['order' => $tempOrder]);
+        } else {
+            // Alttaki zaman dilimine taşı (eğer varsa)
+            $this->moveToNextTimeSlot($item);
+        }
+
+        $this->loadItems();
+    }
+
+    private function moveToPreviousTimeSlot($item)
+    {
+        $visibleSlots = $this->visibleTimeSlots ?? [];
+        if (empty($visibleSlots) || !$item->time_slot)
+            return;
+
+        $currentIndex = array_search($item->time_slot, $visibleSlots);
+        if ($currentIndex > 0) {
+            $prevTimeSlot = $visibleSlots[$currentIndex - 1];
+            $item->update([
+                'time_slot' => $prevTimeSlot,
+                'order' => ScheduleItem::where('schedule_id', $this->scheduleId)
+                    ->where('day_of_week', $item->day_of_week)
+                    ->where('time_slot', $prevTimeSlot)
+                    ->max('order') + 1
+            ]);
+        }
+    }
+
+    private function moveToNextTimeSlot($item)
+    {
+        $visibleSlots = $this->visibleTimeSlots ?? [];
+        if (empty($visibleSlots) || !$item->time_slot)
+            return;
+
+        $currentIndex = array_search($item->time_slot, $visibleSlots);
+        if ($currentIndex !== false && $currentIndex < count($visibleSlots) - 1) {
+            $nextTimeSlot = $visibleSlots[$currentIndex + 1];
+            $item->update([
+                'time_slot' => $nextTimeSlot,
+                'order' => ScheduleItem::where('schedule_id', $this->scheduleId)
+                    ->where('day_of_week', $item->day_of_week)
+                    ->where('time_slot', $nextTimeSlot)
+                    ->max('order') + 1
+            ]);
+        }
+    }
+
+    public function selectItemForMove($itemId)
+    {
+        $this->pendingSwapItemId = $itemId;
+        session()->flash('move_message', 'Taşımak istediğiniz hedef hücreyi seçin veya başka bir dersle yer değiştirin.');
+    }
+
+    public function cancelMove()
+    {
+        $this->pendingSwapItemId = null;
+    }
+
+    public function moveToCell($day, $time)
+    {
+        if (!$this->pendingSwapItemId)
+            return;
+
+        $item = ScheduleItem::findOrFail($this->pendingSwapItemId);
+        $time = ($time === 'null' || !$time) ? null : $time;
+
+        $item->update([
+            'day_of_week' => $day,
+            'time_slot' => $time,
+            'order' => ScheduleItem::where('schedule_id', $this->scheduleId)
+                ->where('day_of_week', $day)
+                ->where('time_slot', $time)
+                ->max('order') + 1
+        ]);
+
+        $this->pendingSwapItemId = null;
+        $this->loadItems();
+        session()->flash('message', 'Ders başarıyla taşındı.');
+    }
+
+    public function swapItems($itemId)
+    {
+        if (!$this->pendingSwapItemId || $this->pendingSwapItemId == $itemId) {
+            $this->selectItemForMove($itemId);
+            return;
+        }
+
+        $sourceItem = ScheduleItem::findOrFail($this->pendingSwapItemId);
+        $targetItem = ScheduleItem::findOrFail($itemId);
+
+        // Yer değiştirme
+        $sourceData = [
+            'day_of_week' => $sourceItem->day_of_week,
+            'time_slot' => $sourceItem->time_slot,
+            'order' => $sourceItem->order,
+        ];
+
+        $sourceItem->update([
+            'day_of_week' => $targetItem->day_of_week,
+            'time_slot' => $targetItem->time_slot,
+            'order' => $targetItem->order,
+        ]);
+
+        $targetItem->update($sourceData);
+
+        $this->pendingSwapItemId = null;
+        $this->loadItems();
+        session()->flash('message', 'Derslerin yerleri değiştirildi.');
+    }
+
     public function toggleTimeColumn()
     {
         $this->showTimeColumn = !$this->showTimeColumn;
-        
+
         if ($this->showTimeColumn) {
             // Saat sütununu göster - tüm saatleri görünür yap
             $this->visibleTimeSlots = $this->timeSlots;
@@ -501,7 +672,7 @@ class ScheduleBuilder extends Component
             // Saat sütununu gizle - tüm saatleri gizle
             $this->visibleTimeSlots = [];
         }
-        
+
         // Eğer program kaydedilmişse, görünürlük ayarını kaydet
         if ($this->scheduleId) {
             $schedule = StudySchedule::where('coach_id', auth()->id())
@@ -509,7 +680,7 @@ class ScheduleBuilder extends Component
             $schedule->update(['visible_time_slots' => $this->visibleTimeSlots]);
         }
     }
-    
+
     public function updatedScheduleType($value)
     {
         // Program tipi değiştiğinde saat sütunu görünürlüğünü ayarla
@@ -534,7 +705,7 @@ class ScheduleBuilder extends Component
                 ->orderBy('day_of_week')
                 ->orderBy('time_slot')
                 ->get();
-            
+
             // Tablo için gün ve saat aralığına göre grupla
             // Saat olmayan görevler için null kullan
             $this->items = [];
@@ -545,6 +716,13 @@ class ScheduleBuilder extends Component
                     $this->items[$key] = [];
                 }
                 $this->items[$key][] = $item;
+            }
+
+            // Her hücre içindeki öğeleri order'a göre sırala
+            foreach ($this->items as $key => $cellItems) {
+                usort($this->items[$key], function ($a, $b) {
+                    return $a->order <=> $b->order;
+                });
             }
         }
     }

@@ -11,7 +11,8 @@ class Resource extends Model
 {
     protected $fillable = [
         'name',
-        'publisher',
+        'field_id',
+        'course_id',
         'description',
         'created_by_user_id',
         'is_admin_resource',
@@ -35,6 +36,16 @@ class Resource extends Model
         return $this->hasMany(StudentResource::class);
     }
 
+    public function field(): BelongsTo
+    {
+        return $this->belongsTo(Field::class);
+    }
+
+    public function course(): BelongsTo
+    {
+        return $this->belongsTo(Course::class);
+    }
+
     // Scope'lar
     public function scopeAdminResources(Builder $query): Builder
     {
@@ -44,7 +55,7 @@ class Resource extends Model
     public function scopeCoachResources(Builder $query, $userId): Builder
     {
         return $query->where('created_by_user_id', $userId)
-                     ->where('is_admin_resource', false);
+            ->where('is_admin_resource', false);
     }
 
     // Helper metodlar
